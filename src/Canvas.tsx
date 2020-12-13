@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import axios from 'axios';
 
 interface CanvasProps {
   className?: string;
@@ -9,6 +10,7 @@ const Canvas = ({ className }: CanvasProps) => {
   const [paint, setPaint] = useState(false);
   const [coord, setCoord] = useState({ x: 0, y: 0 });
   const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+  const [guesses, setGuesses] = useState<string[]>([]);
 
   const getPosition = (canvas: HTMLCanvasElement, event: MouseEvent) => {
     setCoord({
@@ -24,35 +26,38 @@ const Canvas = ({ className }: CanvasProps) => {
     getPosition(ctx.canvas, event);
   };
 
-  const stopPainting = () => setPaint(false);
+  const stopPainting = async () => {
+    setPaint(false);
+
+    if (ctx) {
+      const { data } = await axios.post('http://localhost:5000/recognize', {
+        drawing: ctx.canvas.toDataURL(),
+      });
+      setGuesses(data);
+    }
+  };
 
   const sketch = (event: MouseEvent) => {
     if (!paint || !ctx) return;
     ctx.beginPath();
-
     ctx.lineWidth = 5;
-
-    // Sets the end of the lines drawn
-    // to a round shape.
-    ctx.lineCap = 'round';
-
-    ctx.strokeStyle = 'green';
-
-    // The cursor to start drawing
-    // moves to this coordinate
+    ctx.lineCap = 'square';
+    ctx.strokeStyle = 'black';
     ctx.moveTo(coord.x, coord.y);
-
-    // The position of the cursor
-    // gets updated as we move the
-    // mouse around.
     getPosition(ctx.canvas, event);
-
-    // A line is traced from start
-    // coordinate to this coordinate
     ctx.lineTo(coord.x, coord.y);
-
-    // Draws the line.
     ctx.stroke();
+  };
+
+  const clearCanvas = () => {
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.beginPath();
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.stroke();
+    setGuesses([]);
   };
 
   useEffect(() => {
@@ -63,18 +68,37 @@ const Canvas = ({ className }: CanvasProps) => {
     if (!context) return;
 
     setCtx(context);
+    context.beginPath();
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.stroke();
   }, [canvasRef]);
 
   return (
-    <canvas
-      height="128"
-      width="128"
-      ref={canvasRef}
-      className={`border border-solid border-black ${className}`}
-      onMouseDown={e => startPainting(e.nativeEvent)}
-      onMouseUp={stopPainting}
-      onMouseMove={e => sketch(e.nativeEvent)}
-    />
+    <>
+      <canvas
+        height="128"
+        width="128"
+        ref={canvasRef}
+        className={`border border-solid border-black ${className}`}
+        onMouseDown={e => startPainting(e.nativeEvent)}
+        onMouseUp={stopPainting}
+        onMouseMove={e => sketch(e.nativeEvent)}
+        onMouseLeave={stopPainting}
+      />
+      <button
+        className="bg-blue-400 text-white rounded px-3 py-1"
+        type="button"
+        onClick={clearCanvas}
+      >
+        Clear
+      </button>
+      <div className="mt-3">
+        {guesses.length === 0
+          ? "Draw an image to see the model's prediction"
+          : `Model's prediction: ${guesses[0]}`}
+      </div>
+    </>
   );
 };
 
